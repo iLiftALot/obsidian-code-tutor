@@ -127,8 +127,7 @@ export async function getKataChallenges(queryOptions: QueryOptions) {
     const response = await requestUrl(kataChallengesURL);
 
     return {
-        obj: JSON.parse(JSON.stringify(response.json, null, 4)),
-        str: JSON.stringify(response.json, null, 4),
+        response: response,
         md: htmlToMarkdown(response.text)
     };
 }

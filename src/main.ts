@@ -4,6 +4,7 @@ import {
 	PluginManifest,
 	requestUrl,
 	RequestUrlParam,
+	RequestUrlResponse,
 	RequestUrlResponsePromise
 } from 'obsidian';
 import { CodeTutorPluginSettings, DEFAULT_SETTINGS } from './settings/Settings';
@@ -16,8 +17,7 @@ export default class CodeTutorPlugin extends Plugin {
 	public app: App;
 	public settings: CodeTutorPluginSettings;
 	public kataData: Promise<{
-		obj: any;
-		str: string;
+		response: RequestUrlResponse;
 		md: string;
 	}>;
 
@@ -34,7 +34,7 @@ export default class CodeTutorPlugin extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 
 		this.kataData = getKataChallenges({
-			sortBy: "easiest",
+			sortBy: "newest",
 			language: "javascript",
 			status: "approved",
 			progress: "kata-incomplete",

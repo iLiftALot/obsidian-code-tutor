@@ -1,8 +1,8 @@
 {
-    "name": "code-tutor-plugin",
+    "name": "obsidian-code-tutor",
     "version": "1.0.0",
-    "description": "Step up your coding game by utilizing unlimited coding problems.",
-    "main": "dist/dev/main.js",
+    "description": "Step up your coding game by critically thinking through endless coding problems for any language.",
+    "main": "dist/build/main.js",
     "repository": {
         "directory": ".",
         "type": "git",

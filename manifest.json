@@ -1,9 +1,9 @@
 {
-	"id": "code-tutor-plugin",
-	"name": "Code Tutor Plugin",
+	"id": "obsidian-code-tutor",
+	"name": "Obsidian Code Tutor",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Step up your coding game by utilizing unlimited coding problems.",
+	"description": "Step up your coding game by critically thinking through endless coding problems for any language.",
 	"author": "Nick C.",
 	"isDesktopOnly": false
 }
