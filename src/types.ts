@@ -1,3 +1,8 @@
+export type QueryResult = Promise<{
+    status: number;
+    result: string;
+}>;
+
 export type SortOptions = "newest"
     | "oldest"
     | "popularity"

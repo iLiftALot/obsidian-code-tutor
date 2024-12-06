@@ -4,11 +4,12 @@ import {
     LanguageOptions,
     ProgressOptions,
     QueryOptions,
+    QueryResult,
     SortOptions,
     StatusOptions,
     TagOptions
 } from "./types";
-import { requestUrl, htmlToMarkdown } from "obsidian";
+import { requestUrl, htmlToMarkdown, RequestUrlResponse } from "obsidian";
 
 function getTagIds(tagArray: TagOptions[]) {
     // &tags=ASCII%20Art%2CAlgebra%2CAlgorithms
@@ -117,17 +118,16 @@ function getKataChallengesURL(queryOptions: QueryOptions): string {
     return `${kataSearchURL}/${language}?q=${rank}${progress}${tags}${status}${sortBy}&sample=true`;
 }
 
-export async function getKataChallenges(queryOptions: QueryOptions) {
-    //const turndownService = new TurndownService();
+export async function getKataChallenges(queryOptions: QueryOptions): QueryResult {
     const kataChallengesURL: string = getKataChallengesURL(queryOptions);
-    console.log(`kataChallengesURL: ${kataChallengesURL}`);
-    //const response = turndownService.turndown(
-    //    (await axios.get(kataChallengesURL)).data
-    //);
-    const response = await requestUrl(kataChallengesURL);
+    //console.log(`kataChallengesURL: ${kataChallengesURL}`);
+
+    let response: RequestUrlResponse | undefined;
+
+    response = await requestUrl(kataChallengesURL);
 
     return {
-        response: response,
-        md: htmlToMarkdown(response.text)
-    };
+        status: response.status,
+        result: htmlToMarkdown(response.text)
+    }
 }

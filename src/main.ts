@@ -4,29 +4,25 @@ import {
 	PluginManifest,
 	requestUrl,
 	RequestUrlParam,
-	RequestUrlResponse,
 	RequestUrlResponsePromise
 } from 'obsidian';
 import { CodeTutorPluginSettings, DEFAULT_SETTINGS } from './settings/Settings';
 import { SettingTab } from './settings/SettingsTab';
 import { deepmerge } from 'deepmerge-ts';
 import { getKataChallenges } from './utils';
+import { QueryResult } from './types';
 
 
 export default class CodeTutorPlugin extends Plugin {
 	public app: App;
 	public settings: CodeTutorPluginSettings;
-	public kataData: Promise<{
-		response: RequestUrlResponse;
-		md: string;
-	}>;
+	public kataData: QueryResult;
 
 	public requestUrl: (request: RequestUrlParam | string) => RequestUrlResponsePromise = requestUrl;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.app = app;
-
 	}
 
 	async onload() {
