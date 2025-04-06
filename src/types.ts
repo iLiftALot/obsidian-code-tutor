@@ -1,7 +1,7 @@
-export type QueryResult = Promise<{
+export type QueryResult = {
     status: number;
     result: string;
-}>;
+};
 
 export type SortOptions = "newest"
     | "oldest"
@@ -185,7 +185,7 @@ export type TagOptions = "ASCII Art"
     | "Tutorials"
     | "Unicode"
     | "Web Scraping"
-    | "Web3"
+    | "Web3";
 
 export interface QueryOptions {
     sortBy: SortOptions;
@@ -194,4 +194,15 @@ export interface QueryOptions {
     progress: ProgressOptions;
     difficulty: DifficultyOptions[];
     tags: TagOptions[];
+}
+
+export type ResultData = {
+    url: string;
+    description: string;
+    startingCode: string;
+    testCode: string;
+}
+
+export interface ParsedQuery {
+    [testName: string]: ResultData;
 }

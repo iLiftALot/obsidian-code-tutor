@@ -1,24 +1,19 @@
 import {
 	App,
 	Plugin,
-	PluginManifest,
-	requestUrl,
-	RequestUrlParam,
-	RequestUrlResponsePromise
+	PluginManifest
 } from 'obsidian';
 import { CodeTutorPluginSettings, DEFAULT_SETTINGS } from './settings/Settings';
 import { SettingTab } from './settings/SettingsTab';
 import { deepmerge } from 'deepmerge-ts';
-import { getKataChallenges } from './utils';
-import { QueryResult } from './types';
+import { getChallengeQuery } from './utils';
+import { ParsedQuery } from './types';
 
 
 export default class CodeTutorPlugin extends Plugin {
 	public app: App;
 	public settings: CodeTutorPluginSettings;
-	public kataData: QueryResult;
-
-	public requestUrl: (request: RequestUrlParam | string) => RequestUrlResponsePromise = requestUrl;
+	public kataData: ParsedQuery;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
@@ -29,13 +24,20 @@ export default class CodeTutorPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new SettingTab(this.app, this));
 
-		this.kataData = getKataChallenges({
-			sortBy: "newest",
-			language: "javascript",
-			status: "approved",
-			progress: "kata-incomplete",
-			difficulty: [7, 6],
-			tags: []
+		this.app.workspace.on("layout-ready", async () => {
+			console.log('Loading kata data...');
+
+			this.kataData = await getChallengeQuery({
+				sortBy: "newest",
+				language: "javascript",
+				status: "approved",
+				progress: "kata-incomplete",
+				difficulty: [7, 6],
+				tags: []
+			});
+
+			this.app.workspace.off("layout-ready", () => {});
+			console.log(`Parsed Query:\n${JSON.stringify(this.kataData, null, 4)}`);
 		});
 	}
 

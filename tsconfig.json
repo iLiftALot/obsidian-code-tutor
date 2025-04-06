@@ -23,9 +23,6 @@
       "obsidian-typings/implementations": [
         "node_modules/obsidian-typings/dist/implementations.d.ts",
         "node_modules/obsidian-typings/dist/implementations.cjs"
-      ],
-      "Utility": [
-        "./typings/Utility"
       ]
     },
     "outDir": "./dist"
@@ -34,5 +31,9 @@
     "src/**/*.ts",
     "src/**/*.d.ts"
   ],
-  "exclude": ["node_modules", "main.js", "dist"]
+  "exclude": [
+    "./node_modules",
+    "./main.js",
+    "./dist"
+  ]
 }
