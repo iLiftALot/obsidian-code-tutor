@@ -1,4 +1,4 @@
-import { baseURL, defaultWaitForSelectorOptions, kataLinkExtRegex, kataNameRegex, kataSearchURL } from "./constants";
+import { baseURL, blockedTypes, defaultPuppeteerOptions, defaultWaitForSelectorOptions, kataLinkExtRegex, kataNameRegex, kataSearchURL } from "./constants";
 import {
     DifficultyOptions,
     LanguageOptions,
@@ -6,7 +6,6 @@ import {
     ProgressOptions,
     QueryOptions,
     QueryResult,
-    ResultData,
     SortOptions,
     StatusOptions,
     TagOptions
@@ -14,6 +13,7 @@ import {
 import { Editor } from 'codemirror';
 import { Cluster } from 'puppeteer-cluster';
 import { requestUrl, htmlToMarkdown, RequestUrlResponse } from "obsidian";
+import { HTTPRequest, ResourceType } from "puppeteer";
 
 function getTagIds(tagArray: TagOptions[]) {
     // &tags=ASCII%20Art%2CAlgebra%2CAlgorithms
@@ -124,128 +124,224 @@ function getKataChallengesURL(queryOptions: QueryOptions): string {
 }
 
 // Gather the description, starting code, and test code for the provided kata challenge
-async function parseChallengeResult(
-    kataURL: string,
-    waitForSelectorOptions = defaultWaitForSelectorOptions
-) {
-    const launch = await Cluster.launch({
-        concurrency: Cluster.CONCURRENCY_PAGE,
-        maxConcurrency: 1, // 1 page at a time, which will be the page containing a list of kata challenges
-        
+async function parseChallenges(
+    challengeLinks: string[],
+    challengeNames: string[],
+    selectedLanguage: LanguageOptions
+): Promise<ParsedQuery> {
+    // Create a cluster with higher concurrency 
+    const cluster: Cluster<any, any> = await Cluster.launch(defaultPuppeteerOptions);
+    const results: ParsedQuery = {};
+
+    cluster.task(async ({ page, data }) => {
+        const { url, name } = data;
+
+        try {
+            // Configure page for better performance - block more resources
+            await page.setRequestInterception(true);
+            page.on('request', (req: HTTPRequest) => {
+                const resourceType: ResourceType = req.resourceType();
+
+                if (blockedTypes.includes(resourceType)) {
+                    req.abort();
+                } else if (resourceType === 'stylesheet') {
+                    // Allow only CodeMirror stylesheets, block the rest
+                    const url = req.url().toLowerCase();
+                    
+                    if (url.includes('codemirror') || url.includes('editor')) {
+                        req.continue();
+                    } else {
+                        req.abort();
+                    }
+                } else {
+                    req.continue();
+                }
+            });
+
+            // Set JavaScript timeout to prevent long-running scripts
+            page.setDefaultTimeout(15000);
+
+            await page.goto(url, {
+                timeout: 20000,
+                waitUntil: 'networkidle0'
+            });
+
+            // Extract data with Promise.all for parallel extraction
+            const [description, startingCode, testCode] = await Promise.all([
+                extractDescription(),
+                extractStartingCode(),
+                extractTestCode()
+            ]);
+
+            return {
+                name,
+                url,
+                description,
+                startingCode,
+                testCode
+            };
+        } catch (error) {
+            console.error(`Error processing ${url}: ${error.message}`);
+            
+            return {
+                name,
+                url,
+                description: '',
+                startingCode: '',
+                testCode: ''
+            };
+        }
+
+        // Extracts the description of the kata challenge
+        async function extractDescription(): Promise<string> {
+            try {
+                await page.waitForSelector('.markdown[id="description"]', defaultWaitForSelectorOptions);
+                const content = await page.$eval('.markdown[id="description"]', el => el.innerHTML);
+                
+                return htmlToMarkdown(content);
+            } catch {
+                return '';
+            }
+        }
+
+        // Extracts the default starting code for the challenge
+        async function extractStartingCode(): Promise<string> {
+            try {
+                await page.waitForSelector('#code_container #code .CodeMirror', defaultWaitForSelectorOptions);
+                return await page.evaluate(() => {
+                    const cmEl = document.querySelector('#code_container #code .CodeMirror');
+                    const codeMirror: Editor = (cmEl as any).CodeMirror;
+
+                    if (!codeMirror) return '';
+
+                    return codeMirror.getValue() || '';
+                });
+            } catch {
+                return '';
+            }
+        }
+
+        // Extracts the code used to test the provided code for the challenge
+        async function extractTestCode(): Promise<string> {
+            try {
+                await page.waitForSelector('#fixture_container #fixture .CodeMirror', defaultWaitForSelectorOptions);
+                
+                return await page.evaluate(() => {
+                    const cmEl: Element | null = document.querySelector('#fixture_container #fixture .CodeMirror');
+                    const codeMirror: Editor = (cmEl as any).CodeMirror;
+                    
+                    if (!codeMirror) return '';
+                    
+                    return codeMirror.getValue() || '';
+                });
+            } catch {
+                return '';
+            }
+        }
     });
 
-    launch.task(async ({ page, data: link, worker: { id } }) => {
-        await page.goto(link);
+    // Queue all challenge URLs with batch processing
+    const batchSize = 5; // Process in smaller batches
+    const totalChallenges = challengeLinks.length;
 
-        // Wait for problem description
-        await page.waitForSelector('.markdown[id="description"]', waitForSelectorOptions);
-        const description = await page.$eval('.markdown[id="description"]', descEl => descEl.innerHTML);
+    for (let i = 0; i < totalChallenges; i += batchSize) {
+        const batch = [];
+        const end = Math.min(i + batchSize, totalChallenges);
 
-        // Wait for the Solution CodeMirror instance
-        await page.waitForSelector('#code_container #code .CodeMirror', waitForSelectorOptions);
-        const solutionCode = await page.evaluate(() => {
-            const cmEl = document.querySelector('#code_container #code .CodeMirror');
-            const codeMirror: Editor | undefined = (cmEl as any)?.CodeMirror;
+        // Prepare batch of promises
+        for (let j = i; j < end; j++) {
+            const link = challengeLinks[j];
+            const name = challengeNames[j] || `Challenge ${j + 1}`;
+            const url = `${baseURL}${link}/train/${selectedLanguage}`;
 
-            if (!codeMirror) return '';
+            batch.push(cluster.execute({ url, name }));
+        }
 
-            return codeMirror.getValue();
-        });
+        // Execute batch in parallel and process results
+        const batchResults = await Promise.all(batch);
 
-        // Wait for the Tests CodeMirror instance
-        await page.waitForSelector('#fixture_container #fixture .CodeMirror', {
-            visible: true,
-            hidden: false,
-            timeout: 30000,
-            signal: undefined
-        });
-        const testCode = await page.evaluate(() => {
-            const cmEl: Element | null = document.querySelector(
-                '#fixture_container #fixture .CodeMirror'
-            );
-            const codeMirror: Editor | undefined = (cmEl as any)?.CodeMirror;
+        for (let k = 0; k < batchResults.length; k++) {
+            const result = batchResults[k];
+            
+            if (result) {
+                results[result.name] = {
+                    url: result.url,
+                    description: result.description,
+                    startingCode: result.startingCode,
+                    testCode: result.testCode
+                };
+            }
+        }
 
-            if (!codeMirror) return '';
+        // Free memory between batches
+        if (global.gc) global.gc();
+    }
 
-            return codeMirror.getValue();
-        });
+    // Shutdown the cluster efficiently
+    await cluster.idle();
+    await cluster.close();
 
-        return {
-            description: htmlToMarkdown(description),
-            solutionCode: solutionCode,
-            testCode: testCode
-        };
-    });
-
-    // Queue a task
-    const { description, startingCode, testCode } = await launch.execute(kataURL);
-    //'https://www.codewars.com/kata/567bf4f7ee34510f69000032/train/typescript'
-    //);
-
-    // Shutdown the cluster
-    await launch.idle();
-    await launch.close();
-
-    return { description, startingCode, testCode };
+    // Filter out empty results and return the parsed query
+    return Object.entries(results)
+        .filter(([_, result]) => {
+            return result.startingCode !== '' &&
+                   result.testCode !== '' &&
+                   result.description !== ''
+        })
+        .reduce((acc: ParsedQuery, [name, result]) => {
+            acc[name] = result;
+            
+            return acc;
+        }, {});
 }
 
-// Builds a compiled object and consolidates the data of all gathered kata challenges
+// Matches challenge details from the query in order to build the final result
 async function buildChallengeResult(
     queryOptions: QueryOptions,
-    result: QueryResult
+    response: QueryResult
 ): Promise<ParsedQuery> {
-    const finalData: ParsedQuery = {};
-
-    const queriedContent: string = result.result;
+    const queriedContent: string = response.result;
     const selectedLanguage: LanguageOptions = queryOptions.language;
 
-    const challengeNames: RegExpMatchArray | null = queriedContent.match(kataNameRegex);
-    const challengeLinks: RegExpMatchArray | null = queriedContent.match(kataLinkExtRegex);
+    // Matches all challenge names and their respective links 
+    const challengeNames = queriedContent.match(kataNameRegex);
+    const challengeLinks = queriedContent.match(kataLinkExtRegex);
 
     if (!challengeLinks || !challengeNames) {
-        finalData['error'] = {
-            url: "",
-            description: "No challenges found with the given query options.",
-            startingCode: "",
-            testCode: ""
+        return {
+            'error': {
+                url: "",
+                description: "No challenges found with the given query options.",
+                startingCode: "",
+                testCode: ""
+            }
         };
-
-        return finalData;
     }
 
-    for (const [index, name] of challengeNames.entries()) {
-        const resultData: ResultData = {
-            url: "",
-            description: "",
-            startingCode: "",
-            testCode: ""
-        };
-        resultData['url'] = `${baseURL}${challengeLinks[index]}/train/${selectedLanguage}`;
-
-        const { description, startingCode, testCode } = await parseChallengeResult(resultData.url);
-        
-        resultData['description'] = description;
-        resultData['startingCode'] = startingCode;
-        resultData['testCode'] = testCode;
-
-        finalData[name] = resultData; 
-    }
-
-    return finalData;
+    // Obtain all challenges along with their 
+    return await parseChallenges(challengeLinks, challengeNames, selectedLanguage);
 }
 
+// Queries the CodeWars API for a list of challenges based on the provided options
 async function queryChallenges(queryOptions: QueryOptions): Promise<QueryResult> {
     const kataChallengesURL: string = getKataChallengesURL(queryOptions);
-    const response: RequestUrlResponse = await requestUrl(kataChallengesURL);
+    const response: RequestUrlResponse = await requestUrl({
+        url: kataChallengesURL,
+        method: 'GET',
+        headers: {
+            'Accept': 'text/html',
+            'User-Agent': 'Mozilla/5.0 (compatible; Bot)'
+        }
+    });
 
     return {
         status: response.status,
         result: htmlToMarkdown(response.text)
-    }
+    };
 }
 
 export async function getChallengeQuery(queryOptions: QueryOptions): Promise<ParsedQuery> {
     const queryResult: QueryResult = await queryChallenges(queryOptions);
-
+    
     return (await buildChallengeResult(queryOptions, queryResult));
 }
