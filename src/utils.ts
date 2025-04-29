@@ -1,4 +1,12 @@
-import { baseURL, blockedTypes, defaultPuppeteerOptions, defaultWaitForSelectorOptions, kataLinkExtRegex, kataNameRegex, kataSearchURL } from "./constants";
+import {
+    baseURL,
+    blockedTypes,
+    defaultPuppeteerOptions,
+    defaultWaitForSelectorOptions,
+    kataLinkExtRegex,
+    kataNameRegex,
+    kataSearchURL
+} from "./constants";
 import {
     DifficultyOptions,
     LanguageOptions,
@@ -162,7 +170,7 @@ async function parseChallenges(
             page.setDefaultTimeout(15000);
 
             await page.goto(url, {
-                timeout: 20000,
+                timeout: 60000,
                 waitUntil: 'networkidle0'
             });
 
@@ -319,7 +327,7 @@ async function buildChallengeResult(
     }
 
     // Obtain all challenges along with their 
-    return await parseChallenges(challengeLinks, challengeNames, selectedLanguage);
+    return (await parseChallenges(challengeLinks, challengeNames, selectedLanguage));
 }
 
 // Queries the CodeWars API for a list of challenges based on the provided options
@@ -336,6 +344,7 @@ async function queryChallenges(queryOptions: QueryOptions): Promise<QueryResult>
 
     return {
         status: response.status,
+        html: response.text,
         result: htmlToMarkdown(response.text)
     };
 }

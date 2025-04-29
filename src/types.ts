@@ -1,5 +1,6 @@
 export type QueryResult = {
     status: number;
+    html: string;
     result: string;
 };
 
